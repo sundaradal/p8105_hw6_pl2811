@@ -18,6 +18,9 @@ library(knitr)
 library(png)
 library(corrplot)
 library(ggcorrplot)
+library(tidyverse)
+library(modelr)
+library(mgcv)
 ```
 
 #### Read and clean the data
@@ -45,6 +48,7 @@ str(birthweight_factor)
 Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
 ```
 
+##Fit Modle
 ```{r}
 #look up correlation between variables 
 
@@ -57,25 +61,176 @@ There are high correlation in mother’s pre-pregnancy BMI (pppbmi) and mother�
 
 
 
-fit = lm(bwt ~ babysex + fincome+ frace+ gaweeks +malform+momage+mrace+
+fit0 = lm(bwt ~ babysex + fincome+ frace+ gaweeks +malform+momage+mrace+
            parity+ppbmi+smoken, data = birthweight_factor)
 linear.step = step(fit,direction="both")
 
 #choose the model with lowest AIC
-fit = lm(bwt ~ babysex + fincome + gaweeks + mrace + parity + ppbmi + 
+fit= lm(bwt ~ babysex + fincome + gaweeks + mrace + parity + ppbmi + 
     smoken, data = birthweight_factor)
 linear.step = step(fit,direction="both")
 
-fit %>% 
-  broom::tidy() %>% 
-  select(term, estimate, p.value) %>% 
-  knitr::kable(digits = 3)
+broom::glance(fit)
 
-modelr::add_residuals( birthweight_factor, fit)
-modelr::add_predictions(birthweight_factor, fit)
-                        
+broom::tidy(fit)%>%
+  select(-std.error,- statistic) %>% 
+  knitr::kable()
+````
+##control factor
+```{r}
+birthweight_factor=
+  birthweight_factor %>%
+  mutate(babysex=fct_infreq(babysex), mrace=fct_infreq(mrace))
+```
+
+```{r}                        
 birthweight_factor %>% 
   modelr::add_residuals(fit) %>% 
-  ggplot(aes(x=babysex, fincome,gaweeks,mrace,parity,ppbmi, smoken, y = resid)) + geom_violin()                        
+  ggplot(aes(x=babysex, y = resid)) + geom_violin()  
+
+
+birthweight_factor %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x= mrace, y = resid)) + geom_violin() 
+
+birthweight_factor  %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x =mrace, y = resid)) + geom_point()
+
+
+birthweight_factor  %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x =babysex, y = resid)) + geom_point()
+
+#looks like the data didn't have much outliner
+
+
+
+
+
+```
+
+##Diagnostics
+```{r}
+birthweight_factor<-modelr::add_residuals( birthweight_factor, fit)
+birthweight_factor<-modelr:: add_predictions( birthweight_factor, fit)
+
+birthweight_factor %>%
+  ggplot(aes(x = pred, y = resid))+geom_point() +
+ stat_smooth(method = "lm", se = FALSE)
+
+#Looks like predictions and residuals don't have much liner relation
+```
+##Compare your model to two others
+Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
+
+
+```{r}
+
+fit_main= lm(bwt ~ blength+ gaweeks, data = birthweight_factor)
+
+broom::glance(fit_main)
+
+broom::tidy(fit_main)%>%
+  select(-std.error,- statistic) %>% 
+  knitr::kable()
+
+
+
+fit_inter=lm(bwt ~ babysex+ bhead+blength+babysex*bhead*blength, data = birthweight_factor)
+
+broom::glance(fit_inter)
+
+broom::tidy(fit_inter)%>%
+  select(-std.error,- statistic) %>% 
+  knitr::kable()
+```
+
+```{r}
+cv_df =
+  crossv_mc(birthweight_factor, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df %>% 
+  mutate(
+    fit_mod  = map(train, ~lm(bwt ~ babysex + fincome + gaweeks + mrace + parity + ppbmi + 
+    smoken, data = .x)),
+    main_mod=map(train, ~lm(bwt ~ blength+ gaweeks, data = .x)),
+    inter_mod= map(train, ~lm(bwt ~ babysex+ bhead+blength+babysex*bhead*blength, data = as_tibble(.x))))%>% 
+  mutate(
+    rmse_fit = map2_dbl(fit_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_main = map2_dbl(main_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_inter = map2_dbl(inter_mod, test, ~rmse(model = .x, data = .y)))
+```
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+
+#the lower rmse the better
+```
+
+##Problem 2
+
+#dowlaod data
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+```{r}
+#Plot the distribution of your estimates, and describe these in words
+results<-weather_df%>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
+      results = map(models, broom::tidy)) %>% 
+  select(results) %>% 
+  unnest(results)%>% 
+  select(term,estimate)
+
+results$term<- gsub("(Intercept)", "intercept", results$term, fixed = TRUE)
+
+
+results1<-results %>%
+  pivot_wider(
+  names_from = "term", 
+  values_from = "estimate")%>%
+unnest()%>%
+  mutate(value=log(intercept*tmin))
+
+results1 %>% 
+ggplot(aes(x = value)) + geom_density()
+
+
+
+results_5<-weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
+      results = map(models, broom::glance))%>%
+ select(results) %>% 
+  unnest(results)
+
 ```
 
