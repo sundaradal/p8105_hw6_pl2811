@@ -23,6 +23,8 @@ library(modelr)
 library(mgcv)
 ```
 
+#Problem 1
+
 #### Read and clean the data
 ```{r}
 birthweight <- read.csv(file ="/Users/lin/Desktop/birthweight.csv")
@@ -37,36 +39,38 @@ birthweight %>%
 #check the variabls's level
 str(birthweight)
 
-#change some variabls into factor
+#change some variables into factor
 
 birthweight_factor<-birthweight %>%
     mutate_at(vars(babysex, frace, malform, mrace),
                 list(factor))
 
+# make sure variables's lelvel
 str(birthweight_factor)             
-
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
 ```
 
 ##Fit Modle
+
 ```{r}
+
 #look up correlation between variables 
 
 model.matrix(~0+., data=birthweight_factor) %>% 
   cor(use="pairwise.complete.obs") %>% 
   ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2)
 
-There are high correlation in mother’s pre-pregnancy BMI (pppbmi) and mother’s pre-pregnancy weight (ppwt),  mother’s weight at delivery(delwt) and mother’s pre-pregnancy weight(ppwt), mother’s weight at delivery (delwt) and mother’s pre-pregnancy BMI (ppbmi), race of father and mother, baby’s length at birth (blength) and baby’s birth weight (bwt).
-#choose varibals by the correlation plot ＃found out pnumlbw and pnumgsa are all 0, drop theme.
+
+#choose varibals by the correlation plot
+#found out pnumlbw and pnumgsa are all 0, drop them.
 
 
 
 fit0 = lm(bwt ~ babysex + fincome+ frace+ gaweeks +malform+momage+mrace+
            parity+ppbmi+smoken, data = birthweight_factor)
-linear.step = step(fit,direction="both")
+linear.step = step(fit0 ,direction="both")
 
 #choose the model with lowest AIC
-fit= lm(bwt ~ babysex + fincome + gaweeks + mrace + parity + ppbmi + 
+fit=lm(bwt ~ babysex + fincome + gaweeks + mrace + parity + ppbmi + 
     smoken, data = birthweight_factor)
 linear.step = step(fit,direction="both")
 
@@ -75,8 +79,9 @@ broom::glance(fit)
 broom::tidy(fit)%>%
   select(-std.error,- statistic) %>% 
   knitr::kable()
-````
+```
 ##control factor
+
 ```{r}
 birthweight_factor=
   birthweight_factor %>%
@@ -93,22 +98,20 @@ birthweight_factor %>%
   modelr::add_residuals(fit) %>% 
   ggplot(aes(x= mrace, y = resid)) + geom_violin() 
 
-birthweight_factor  %>% 
-  modelr::add_residuals(fit) %>% 
-  ggplot(aes(x =mrace, y = resid)) + geom_point()
 
 
 birthweight_factor  %>% 
   modelr::add_residuals(fit) %>% 
   ggplot(aes(x =babysex, y = resid)) + geom_point()
 
-#looks like the data didn't have much outliner
-
-
-
-
 
 ```
+
+
+
+Looks like the data didn't have much outlier
+
+
 
 ##Diagnostics
 ```{r}
@@ -119,11 +122,10 @@ birthweight_factor %>%
   ggplot(aes(x = pred, y = resid))+geom_point() +
  stat_smooth(method = "lm", se = FALSE)
 
-#Looks like predictions and residuals don't have much liner relation
+#Looks like there is no assumption has been violated.
 ```
-##Compare your model to two others
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
 
+##Compare your model to two others
 
 ```{r}
 
@@ -177,12 +179,17 @@ cv_df %>%
   mutate(model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 
-#the lower rmse the better
+
 ```
+
+
+
+The lower rmse the better, so the modle including head circumference, length, sex, and  three-way interaction is the best modle among three.
+
 
 ##Problem 2
 
-#dowlaod data
+##dowlaod data
 ```{r}
 weather_df = 
   rnoaa::meteo_pull_monitors(
@@ -197,9 +204,8 @@ weather_df =
   select(name, id, everything())
 ```
 
-#making plot 
+##making plot 
 ```{r}
-#Plot the distribution of your estimates, and describe these in words
 results<-weather_df%>% 
   modelr::bootstrap(n = 5000) %>% 
   mutate(
@@ -211,6 +217,7 @@ results<-weather_df%>%
 
 results$term<- gsub("(Intercept)", "intercept", results$term, fixed = TRUE)
 
+  
 
 results1<-results %>%
   pivot_wider(
@@ -219,8 +226,12 @@ results1<-results %>%
 unnest()%>%
   mutate(value=log(intercept*tmin))
 
+# 95% confidence interval for log(β̂0∗β̂1 )
+quantile(results1$value, probs = c(0.25, 0.975))
+
+#plot for log(B0*B1)
 results1 %>% 
-ggplot(aes(x = value)) + geom_density()
+ggplot(aes(x = value))+geom_density()+labs(x="log(B0*B1)")
 
 
 
@@ -232,8 +243,19 @@ results2<-weather_df %>%
  select(results) %>% 
   unnest(results) %>%
     select(r.squared)
-
+# 95% confidence interval for  r squared
+quantile(results2$r.squared, probs = c(0.25, 0.975))
+#plot for r squared
 results2 %>% 
 ggplot(aes(x = r.squared)) + geom_density()
+
+
+
 ```
+
+
+
+Both plot looks like normal distribution
+
+
 
