@@ -255,7 +255,7 @@ ggplot(aes(x = r.squared)) + geom_density()
 
 
 
-Both plot looks like normal distribution
+Both plots looks like normal distribution
 
 
 
