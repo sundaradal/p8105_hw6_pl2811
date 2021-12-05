@@ -23,9 +23,9 @@ library(modelr)
 library(mgcv)
 ```
 
-#Problem 1
+#### Problem 1
 
-#### Read and clean the data
+##Read and clean the data
 ```{r}
 birthweight <- read.csv(file ="/Users/lin/Desktop/birthweight.csv")
 ```
@@ -187,7 +187,7 @@ cv_df %>%
 The lower rmse the better, so the modle including head circumference, length, sex, and  three-way interaction is the best modle among three.
 
 
-##Problem 2
+####Problem 2
 
 ##dowlaod data
 ```{r}
@@ -227,7 +227,7 @@ unnest()%>%
   mutate(value=log(intercept*tmin))
 
 # 95% confidence interval for log(β̂0∗β̂1 )
-quantile(results1$value, probs = c(0.25, 0.975))
+quantile(results1$value, probs = c(0.025, 0.975))
 
 #plot for log(B0*B1)
 results1 %>% 
@@ -244,7 +244,7 @@ results2<-weather_df %>%
   unnest(results) %>%
     select(r.squared)
 # 95% confidence interval for  r squared
-quantile(results2$r.squared, probs = c(0.25, 0.975))
+quantile(results2$r.squared, probs = c(0.025, 0.975))
 #plot for r squared
 results2 %>% 
 ggplot(aes(x = r.squared)) + geom_density()
